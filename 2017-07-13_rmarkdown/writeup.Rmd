@@ -1,0 +1,72 @@
+---
+title: 'R-Ladies San Diego: Mini RMarkdown Tutorial'
+author: "Page Piccinini"
+date: "July 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+# Load packages
+library(tidyverse)
+library(forcats)
+library(knitr)
+
+# Load function for theme
+source("rladiesggplot2theme.R")
+
+# Load data
+data_sd = read.csv("rladies_sandiego.csv")
+data_global = read.csv("rladies_global.csv")
+```
+
+# Introduction
+
+We are going to write about R-Ladies.
+
+# About R-Ladies
+
+## R-Ladies San Diego
+
+R-Ladies San Diego is a group with diverse skill levels, ranging from `r summary(data_sd$level)[1]` beginners to `r summary(data_sd$level)[5]` women how have taught R classes or tutorials.
+
+```{r Level in R, fig.width=10}
+ggplot(data_sd, aes(x = level)) +
+  geom_bar() +
+  r_ladies_theme()
+```
+
+```{r Possible topics data, include = FALSE}
+data_sd_topics = data_sd %>%
+  mutate(topics = strsplit(as.character(topics), ", ")) %>%
+  unnest(topics) %>%
+  group_by(topics) %>%
+  count() %>%
+  ungroup()
+```
+
+Regarding skill interests, San Diegan R-Ladies are particularly interested in `r arrange(data_sd_topics, desc(n))[1,1]`, `r arrange(data_sd_topics, desc(n))[2,1]`, and `r arrange(data_sd_topics, desc(n))[3,1]`.
+
+```{r Possible topics plot}
+ggplot(data_sd_topics, aes(x = reorder(topics, -n), y = n)) +
+  geom_bar(stat = "identity") +
+  r_ladies_theme() +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+## R-Ladies Global
+
+R-Ladies currently exists in `r length(unique(data_global$country))` countries. In the United States it exists in `r length(unique(filter(data_global, country == "US")$state))` states. Here is the full list of US based R-Ladies groups.
+
+```{r Global US}
+data_us = data_global %>%
+  filter(country == "US")
+
+kable(data_us)
+```
+
+# Conclusion
+
+R-Ladies is awesome!
+
