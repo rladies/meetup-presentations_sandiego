@@ -1,0 +1,9 @@
+Field,Description
+street_name,The vehicles were counted on this street
+limits,The vehicles were counted between these cross streets
+northbound_count,The 24 hour count of northbound vehicles
+southbound_count,The 24 hour count of southbound vehicles
+eastbound_count,The 24 hour count of eastbound vehicles
+westbound_count,The 24 hour count of westbound vehicles
+total_count,The 24 hour total of all directions of vehicles combined
+count_date,The vehicles were counted on this date
