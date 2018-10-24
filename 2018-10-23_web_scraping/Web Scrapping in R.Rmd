@@ -1,0 +1,110 @@
+---
+title: "Web Scraping in R"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+In simple terms, web scraping is a technique employed to extract data from a website. The website html code is parsed into a programming language such as R or Python and then manipulated to get data/text from it.
+
+- https://medium.com/the-andela-way/learn-how-to-scrape-the-web-2a7cc488e017
+
+Websites can be coded using a variety of languages, including HTML, XML and JSON.  Briefly,
+
+HTML (Hypertext Markup Language) is the markup language for constructing web pages. The markup commands employed in the web-based content signifies structure of the document and its layout to the browser. 
+
+XML (Extensible Markup Language) is a language that enables a user to define a representation of data or data structure where values are assigned in each field in the structure.
+
+Difference between XML and HTML. XML and HTML are the markup languages defined for the distinct purposes and have several differences. ... XML can be used to build markup languages while HTML itself is a markup language. HTML (Hypertext Markup Language) was designed to facilitate the transfer of web-based documents.
+
+- https://techdifferences.com/difference-between-xml-and-html.html
+
+A summary of differences:
+Tags are basic building blocks of both HTML and XML documents.
+ 
+ Differences between HTML and XML
+ 1. HTML tags are predefined tags where as XML tags are user defined tags.
+ 2. HTML tags are limited number of tags where as XML tags are extensible.
+ 3. HTML tags are case insensitive where as XML tags are sensitive.
+ 4. HTML tags are meant for displaying the data but not for describing the data where as XML tags are meant for           describing the data.
+ 5. HTML focuses on how data looks where as XML focuses on what data is.
+
+- https://top.quora.com/What-is-the-difference-between-HTML-and-XML 
+ 
+JSON is a way of representing objects, XML/HTML, again are mark up languages.  JSON looks more like the data structures we declare in programming languages. Also it has less redundant repetition of names.  JSON should be the first choice for object notation, where HTML/XML's sweet spot is document markup.
+
+- https://stackoverflow.com/questions/2620270/what-is-the-difference-between-json-and-xml
+
+## Website Tools
+
+Before we start writing the code, we need to first examine the html so that we understand where the data we need is located and how we can get it. 
+
+There are several ways that this might be done.  Chrome and Safari have web developer tools that will show the code for the web site of your choosing.
+
+There is also a plug-in that you can add to your browser that will also help identify the code needed to extract your data.
+
+- https://blog.rstudio.com/2014/11/24/rvest-easy-web-scraping-with-r/
+- https://www.analyticsvidhya.com/blog/2017/03/beginners-guide-on-web-scraping-in-r-using-rvest-with-hands-on-knowledge/
+
+
+## Finally, the Code
+
+The rvest package makes it easy to scrape (or harvest) data from html web pages. It is designed to work with magrittr.
+
+```{r}
+install.packages('magrittr')
+install.packages('xml2')
+install.packages('rvest')
+library('magrittr')
+library('xml2')
+library('dplyr')
+library('tidyverse')
+library('rvest')
+```
+
+Following sample code from a tutorial:
+```{r}
+#Specifying the url for desired website to be scrapped
+url <- 'https://www.atu2.com/lyrics/lyrics.src?VID=2&SID=5'
+#Reading the HTML code from the website
+webpage <- read_html(url)
+#Using CSS selectors to scrap the rankings section
+rank_data_html <- html_nodes(webpage,'td.content')
+#Converting the ranking data to text
+rank_data <- html_text(rank_data_html)
+#Let's have a look at the rankings
+head(rank_data)
+```
+
+However, I could not figure out how to turn that into a database for me.  So I stumbled around a bit to get the code below.  I also needed to add more packages, including dplyr and tidyverse,
+
+```{r}
+url <- 'https://www.atu2.com/lyrics/lyrics.src?VID=2&SID=1'
+webpage <- read_html(url)
+td_content_html <- html_nodes(webpage,'td.content')
+td_content <- html_text(td_content_html)
+head(td_content)
+Boy1 <- data_frame(Song=str_sub(td_content[2:2],9 , 21), 
+                  Lyrics=str_sub(td_content[2:2],384 , 2000),
+                  Album="Boy",
+                  Year = 1980,
+                  us_hot = '81',
+                  us_main = '20')
+tail(Boy1$Lyrics, n = 1400L)
+```
+
+This code is not the most elegant because it requires constant review to determine the start and end of the song name and the start and end of the song lyrics.
+
+So the challenge today:
+
+A.)  Improve my code to make this process automated.  
+B.)  Find a website that you would like to scrape.
+
+C.)  Extra credit challenge:  Scrape a JSON website.
+
+
+
