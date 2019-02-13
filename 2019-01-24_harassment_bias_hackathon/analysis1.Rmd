@@ -1,0 +1,260 @@
+---
+title: "What is the demographic information by witnessing, hearing about, experiencing harassment?"
+author: "R-Ladies San Diego"
+date: "January 24, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Introduction
+
+For this hackathon we looked at data from the [Survey of Linguists and Language Researchers](https://sites.google.com/umich.edu/lingclimatesurvey/). We wanted to look at the question "What is the demographic information by witnessing, hearing about, experiencing harassment?".
+
+
+# Results
+
+```{r Load package and data, message = FALSE, warning = FALSE}
+# Load packages
+library(tidyverse)
+library(scales)
+library(stringr)
+
+# Load data
+data <- read_csv("data/survey_of_linguists-r_ladies.csv")
+```
+
+We looked at potential interactions between two questions:
+
+1. How often have you witnessed bias incidents directed at groups or individuals?
+2. How often have you been the target of bias incidents?
+
+## Gender and Race
+
+To reduce the dataset size we only looked at people who self-identified as Female or Male. The numbers above the bars are number of respondents. We did not find as strong of a gender effect as expected. However, people who were targets of bias did indeed report higher incidents of witnessing bias.
+
+```{r Gender bias plot}
+data %>%
+  # Filter data
+  filter(Gender_SN %in% c("Female", "Male")) %>%
+  filter(!is.na(Bias_incidents)) %>%
+  filter(!is.na(Bias_incidents_target)) %>%
+  filter(Bias_incidents != "NR") %>%
+  filter(Bias_incidents_target != "NR") %>%
+  # Compute number of respondents in each grouping
+  group_by(Gender_SN, Bias_incidents, Bias_incidents_target) %>%
+  summarize(num_respondents = n()) %>%
+  ungroup() %>%
+  # Compute number of respondents in overarching grouping
+  group_by(Gender_SN, Bias_incidents_target) %>%
+  mutate(total_respondents = sum(num_respondents)) %>%
+  ungroup() %>%
+  # Compute percentage of respondents
+  mutate(pct_respondents = num_respondents / total_respondents) %>%
+  # Reorder response values
+  mutate(Bias_incidents = factor(Bias_incidents,
+                                 levels = c("Never",
+                                            "Rarely",
+                                            "Sometimes",
+                                            "Often",
+                                            "Constantly"))) %>%
+  mutate(Bias_incidents_target = factor(Bias_incidents_target,
+                                        levels = c("Never",
+                                                   "Rarely",
+                                                   "Sometimes",
+                                                   "Often",
+                                                   "Constantly"))) %>%
+  # Initialize plot
+  ggplot(aes(x = Bias_incidents_target,
+             y = pct_respondents,
+             fill = Bias_incidents)) +
+  facet_wrap(~Gender_SN) +
+  # Add bars
+  geom_bar(stat = "identity", position = "dodge") +
+  # Add annotations for number of respondents in each bar
+  geom_text(aes(label = num_respondents),
+            position = position_dodge(width = 1)) +
+  # Stylize plot
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "How often have you been the target of bias incidents?",
+       y = "% of Respondents",
+       fill = "How often have you witnessed bias incidents\ndirected at groups or individuals?") +
+  theme_classic() +
+  theme(legend.position = "top")
+```
+
+Next we looked at this same question but separating respondents by race. Again, due to number of data points we filtered down the data, only including respondents who self-identified as White or POC. Similar effects were found as for gender.
+
+```{r Race bias plot}
+data %>%
+  # Filter data
+  filter(Race_DB_POC %in% c("White", "POC")) %>%
+  filter(!is.na(Bias_incidents)) %>%
+  filter(!is.na(Bias_incidents_target)) %>%
+  filter(Bias_incidents != "NR") %>%
+  filter(Bias_incidents_target != "NR") %>%
+  # Compute number of respondents in each grouping
+  group_by(Race_DB_POC, Bias_incidents, Bias_incidents_target) %>%
+  summarize(num_respondents = n()) %>%
+  ungroup() %>%
+  # Compute number of respondents in overarching grouping
+  group_by(Race_DB_POC, Bias_incidents_target) %>%
+  mutate(total_respondents = sum(num_respondents)) %>%
+  ungroup() %>%
+  # Compute percentage of respondents
+  mutate(pct_respondents = num_respondents / total_respondents) %>%
+  # Reorder response values
+  mutate(Bias_incidents = factor(Bias_incidents,
+                                 levels = c("Never",
+                                            "Rarely",
+                                            "Sometimes",
+                                            "Often",
+                                            "Constantly"))) %>%
+  mutate(Bias_incidents_target = factor(Bias_incidents_target,
+                                        levels = c("Never",
+                                                   "Rarely",
+                                                   "Sometimes",
+                                                   "Often",
+                                                   "Constantly"))) %>%
+  # Initialize plot
+  ggplot(aes(x = Bias_incidents_target,
+             y = pct_respondents,
+             fill = Bias_incidents)) +
+  facet_wrap(~Race_DB_POC) +
+  # Add bars
+  geom_bar(stat = "identity", position = "dodge") +
+  # Add annotations for number of respondents in each bar
+  geom_text(aes(label = num_respondents),
+            position = position_dodge(width = 1)) +
+  # Stylize plot
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "How often have you been the target of bias incidents?",
+       y = "% of Respondents",
+       fill = "How often have you witnessed bias incidents\ndirected at groups or individuals?") +
+  theme_classic() +
+  theme(legend.position = "top")
+```
+
+Finally, we wanted to look at the interaction of gender and race. The plot below is from the same dataset as the first two plots, but plotted together. The main finding here was that the only respondents to say they have "Constantly" been a target of bias were respondents who identified as female *and* POC.
+
+```{r Gender x race bias plot}
+data %>%
+  # Filter data
+  filter(Gender_SN %in% c("Female", "Male")) %>%
+  filter(Race_DB_POC %in% c("White", "POC")) %>%
+  filter(!is.na(Bias_incidents)) %>%
+  filter(!is.na(Bias_incidents_target)) %>%
+  filter(Bias_incidents != "NR") %>%
+  filter(Bias_incidents_target != "NR") %>%
+  # Compute number of respondents in each grouping
+  group_by(Gender_SN, Race_DB_POC, Bias_incidents, Bias_incidents_target) %>%
+  summarize(num_respondents = n()) %>%
+  ungroup() %>%
+  # Compute number of respondents in overarching grouping
+  group_by(Gender_SN, Race_DB_POC, Bias_incidents_target) %>%
+  mutate(total_respondents = sum(num_respondents)) %>%
+  ungroup() %>%
+  # Compute percentage of respondents
+  mutate(pct_respondents = num_respondents / total_respondents) %>%
+  # Reorder response values
+  mutate(Bias_incidents = factor(Bias_incidents,
+                                 levels = c("Never",
+                                            "Rarely",
+                                            "Sometimes",
+                                            "Often",
+                                            "Constantly"))) %>%
+  mutate(Bias_incidents_target = factor(Bias_incidents_target,
+                                        levels = c("Never",
+                                                   "Rarely",
+                                                   "Sometimes",
+                                                   "Often",
+                                                   "Constantly"))) %>%
+  # Initialize plot
+  ggplot(aes(x = Bias_incidents_target,
+             y = pct_respondents,
+             fill = Bias_incidents)) +
+  facet_grid(Gender_SN~Race_DB_POC) +
+  # Add bars
+  geom_bar(stat = "identity", position = "dodge") +
+  # Add annotations for number of respondents in each bar
+  geom_text(aes(label = num_respondents),
+            position = position_dodge(width = 1)) +
+  # Stylize plot
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "How often have you been the target of bias incidents?",
+       y = "% of Respondents",
+       fill = "How often have you witnessed bias incidents\ndirected at groups or individuals?") +
+  theme_classic() +
+  theme(legend.position = "top")
+```
+
+## Highest Education Level
+
+We also wanted to see if the answers to these questions were affected by current, highest education level. Note, for this analysis we did not include any filters on gender or race. In general respondents later in their career tended to report higher incidents of being the target of bias. There was not an strong interaction between the two variables.
+
+```{r Highest education level plot}
+data %>%
+  # Clean up data and filter
+  mutate(Highest_degree_MH_clean = str_replace(Highest_degree_MH, "\t", "")) %>%
+  filter(Highest_degree_MH_clean %in% c("ABD", "B.A. / B.S.", "M.A. / M.S. / M. Ed.", "Ph.D")) %>%
+  filter(!is.na(Bias_incidents)) %>%
+  filter(!is.na(Bias_incidents_target)) %>%
+  filter(Bias_incidents != "NR") %>%
+  filter(Bias_incidents_target != "NR") %>%
+  # Compute number of respondents in each grouping
+  group_by(Highest_degree_MH_clean, Bias_incidents, Bias_incidents_target) %>%
+  summarize(num_respondents = n()) %>%
+  ungroup() %>%
+  # Compute number of respondents in overarching grouping
+  group_by(Highest_degree_MH_clean, Bias_incidents_target) %>%
+  mutate(total_respondents = sum(num_respondents)) %>%
+  ungroup() %>%
+  # Compute percentage of respondents
+  mutate(pct_respondents = num_respondents / total_respondents) %>%
+  # Reorder response values
+  mutate(Highest_degree_MH_clean = factor(Highest_degree_MH_clean,
+                                          levels = c("B.A. / B.S.",
+                                                     "M.A. / M.S. / M. Ed.",
+                                                     "ABD",
+                                                     "Ph.D"))) %>%
+  mutate(Bias_incidents = factor(Bias_incidents,
+                                 levels = c("Never",
+                                            "Rarely",
+                                            "Sometimes",
+                                            "Often",
+                                            "Constantly"))) %>%
+  mutate(Bias_incidents_target = factor(Bias_incidents_target,
+                                        levels = c("Never",
+                                                   "Rarely",
+                                                   "Sometimes",
+                                                   "Often",
+                                                   "Constantly"))) %>%
+  # Initialize plot
+  ggplot(aes(x = Bias_incidents_target,
+             y = pct_respondents,
+             fill = Bias_incidents)) +
+  facet_wrap(~Highest_degree_MH_clean) +
+  # Add bars
+  geom_bar(stat = "identity", position = "dodge") +
+  # Add annotations for number of respondents in each bar
+  geom_text(aes(label = num_respondents),
+            position = position_dodge(width = 1)) +
+  # Stylize plot
+  scale_y_continuous(labels = percent) +
+  scale_fill_brewer(palette = "Dark2") +
+  labs(x = "How often have you been the target of bias incidents?",
+       y = "% of Respondents",
+       fill = "How often have you witnessed bias incidents\ndirected at groups or individuals?") +
+  theme_classic() +
+  theme(legend.position = "top")
+```
+
+
+# Conclusion
+
+We had expected to find an interaction with gender and race such that minority groups would report higher incidents of witnessing bias, regardless of their own experience as targets. However, while there were higher incidents of being the target for minorities, those who were rarely targets did not report higher incidents of witnessing, regardless of race or gender. Also, the rate of being a target of bias did tend to increase through a respondent's career. Although, this may be conflated with our gender and race analysis.

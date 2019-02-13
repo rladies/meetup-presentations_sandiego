@@ -1,0 +1,1 @@
+This hackathon was completed with data generously provdided by the [Survey of Linguists and Language Researchers](https://sites.google.com/umich.edu/lingclimatesurvey/). For more information about the survey, public data, and analyses already conducted, please visit the website for more information.
