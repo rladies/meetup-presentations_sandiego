@@ -1,0 +1,658 @@
+---
+title: "Sentiment analysis of love songs"
+output: html_notebook
+---
+
+This tutorial is based on the following references:
+* https://www.datacamp.com/community/tutorials/R-nlp-machine-learning
+* https://www.datacamp.com/community/tutorials/sentiment-analysis-R#descriptivestatistics
+
+## Getting song lyrics
+
+First we need to find some song lyrics.
+We can use the [awesome genius package from Josiah Parry](https://github.com/JosiahParry/genius). 
+Let's install that and load all the necessary libraries
+```{r}
+#devtools::install_github("josiahparry/genius")
+library(genius)
+library(tidyverse)
+library(readr)
+library(tidytext)
+library(knitr)
+library(formattable)
+library(kableExtra)
+library(gridExtra)
+library(wordcloud2) 
+library(circlize)
+```
+
+The website theknot.com has prepared a [list of the top 100 love songs](https://www.theknot.com/content/best-love-songs).
+This goes across different music genre, from the good old classics to more modern stuff. So it seems like a great sample of love songs we can use to find out what a love song is made of.
+To speed things up I've already prepared a table with the name of the tracks and the artists that recorded them. But you can always go back to our previous webscraping tutorial to see how you could create the table yourself. Let's load the file with our love song info:
+
+```{r}
+top100love <- read_csv("top100love.csv")
+```
+
+We can use this table along with the genius package to download the lyrics to all these songs. Since that takes a bit of time I've already done it and saved the results in the provided songs.RData file, so we can just load that instead. 
+
+Here are the commands to download songs yourself:
+```{r}
+#top100love_lyrics <- top100love %>%
+#    add_genius(artist = artist, type_group = track, type = "lyrics")
+# Note: a few of the songs were not available on genius
+```
+
+As a comparison group, let's also download the top 100 songs from genius. These are likely to also be a mix of genre, but we don't expect it'll be particularly enriched for love songs.
+
+We'll import the table with those tracks and use genius to grab the lyrics:
+```{r}
+#top100 <- read_csv("top100.csv")
+#top100_lyrics <- top100 %>%
+#    add_genius(artist = artist, type_group = track, type = "lyrics")
+```
+Just to load the data from these commands we can use:
+
+```{r}
+# How I saved it:
+#save(top100_lyrics, top100love_lyrics, file = "songs.RData")
+load("songs.RData")
+```
+
+
+Let's check how many tracks genius actually found for each of our datasets:
+```{r}
+top100_lyrics %>% 
+    group_by(artist, track) %>% 
+    count() %>% 
+    nrow()
+```
+
+```{r}
+top100love_lyrics %>% 
+    group_by(artist, track) %>% 
+    count() %>% 
+    nrow()
+```
+
+## Clean up time! 
+
+We'll begin by removing stuff from our environment:
+```{r}
+rm(top100)
+rm(top100love)
+```
+
+First, get rid of contractions by creating a little function that handles most scenarios using gsub().
+
+```{r}
+fix.contractions <- function(doc) {
+  doc <- gsub("won't", "will not", doc)
+  doc <- gsub("can't", "can not", doc)
+  doc <- gsub("n't", " not", doc)
+  doc <- gsub("'ll", " will", doc)
+  doc <- gsub("'re", " are", doc)
+  doc <- gsub("'ve", " have", doc)
+  doc <- gsub("'m", " am", doc)
+  doc <- gsub("'d", " would", doc)
+  doc <- gsub("'s", "", doc)
+  doc <- gsub("in'", "ing", doc)
+  return(doc)
+}
+
+top100_lyrics$lyric <- sapply(top100_lyrics$lyric, fix.contractions)
+top100love_lyrics$lyric <- sapply(top100love_lyrics$lyric, fix.contractions)
+```
+
+You'll also notice special characters that muddy the text. You can remove those with the gsub() function and a simple regular expression. Notice it's critical to expand contractions before doing this step!
+
+```{r}
+# function to remove special characters (match any character not in the set below)
+removeSpecialChars <- function(x) gsub("[^a-zA-Z0-9 ]", " ", x)
+
+top100_lyrics$lyric <- sapply(top100_lyrics$lyric, removeSpecialChars)
+top100love_lyrics$lyric <- sapply(top100love_lyrics$lyric, removeSpecialChars)
+
+# convert everything to lower case
+top100_lyrics$lyric <- sapply(top100_lyrics$lyric, tolower)
+top100love_lyrics$lyric <- sapply(top100love_lyrics$lyric, tolower)
+```
+
+One more step in cleaning the data. Many lyrics can include phrases like "Repeat Chorus", or labels such as "Bridge" and "Verse". Let's get some of that out of the way. For now we'll create a list of these undesirable words to use in the next fe steps. As we progress with the analysis we can always come back and add more elements here.
+
+```{r}
+undesirable_words <- c("chorus", "repeat", "lyrics", "bridge", 
+                       "verse", "transcription", "repeats")
+```
+
+## Tidy Text Format
+
+To begin the analysis, you need to break out the lyrics into individual words. This process is called tokenization.
+Tidy Text: a table with one token per row. 
+In this case study, a token will be a word. Tokenization is therefore the process of splitting the lyrics into tokens. This tutorial will use tidytext's unnest_tokens() to do this.
+We'll also use this chance to remove our undesired words above and some common stop words that don't add much meaning to our sentiment analysis (such as: the, and, this, how, etc).
+
+```{r}
+top100filtered <- top100_lyrics %>%
+  unnest_tokens(word, lyric) %>% # unnest_tokens() requires at least two arguments: the output column name that will be created ("word", in this case), and the input column that holds the current text (lyrics).
+  anti_join(stop_words) %>% # This removes the most common stop words
+  filter(!word %in% undesirable_words) # Remove our undesired words
+
+top100lovefiltered <- top100love_lyrics %>%
+  unnest_tokens(word, lyric) %>% 
+  anti_join(stop_words) %>% 
+  filter(!word %in% undesirable_words)
+```
+
+Well we can already see from the size of our tables that we seem to have way less words in our love songs. Let's check if that's true.
+```{r}
+length(unique(top100filtered$word))
+length(unique(top100lovefiltered$word))
+```
+
+```{r}
+cbind(top100lovefiltered %>% 
+  filter(word == "love") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% 
+  distinct() %>% # remove duplicate records
+  count(name = "love"),
+top100filtered %>% 
+  filter(word == "love") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% 
+  distinct() %>% # remove duplicate records
+  count(name = "all"))
+```
+We can see the songs that have the word love in a pretty table too:
+```{r}
+top100lovefiltered %>% 
+  filter(word == "love") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% # choose columns to view
+  arrange() %>% # order the table rows
+  distinct() %>% # remove duplicate records
+  #top_n(10,track) %>% #could be used to see top 10 songs only
+  mutate(track = color_tile("lavenderblush","lavenderblush")(track)) %>% # if numeric data, could be gradient between 2 colors.
+  mutate(word = color_tile("lightpink","lightpink")(word)) %>%
+  kable(escape = FALSE, align = "c", caption = "Tokenized Format Example") %>% # makes the table look nicer
+  kable_styling(bootstrap_options = 
+                  c("striped", "condensed", "bordered"), # makes the white/grey row color, reduce the padding and add a border to the table.
+                  full_width = FALSE)
+
+#Customize the text tables for consistency using HTML formatting
+my_kable_styling <- function(dat, caption) {
+  kable(dat, "html", escape = FALSE, caption = caption) %>%
+  kable_styling(bootstrap_options = c("striped", "condensed", "bordered"),
+                full_width = FALSE)
+}
+```
+
+```{r}
+top100filtered %>% 
+  filter(word == "love") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% # choose columns to view
+  arrange() %>% # order the table rows
+  distinct() %>% # remove duplicate records
+  #top_n(10,track) %>% #could be used to see top 10 songs only
+  mutate(track = color_tile("lavenderblush","lavenderblush")(track)) %>% # if numeric data, could be gradient between 2 colors.
+  mutate(word = color_tile("lightpink","lightpink")(word)) %>%
+  my_kable_styling("Tokenized format example")
+```
+
+Is it true that love and hate are much closer than we think? How many love songs also mention hate? None!
+
+```{r}
+cbind(top100lovefiltered %>% 
+  filter(word == "hate") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% 
+  distinct() %>% # remove duplicate records
+  count(name = "love"),
+top100filtered %>% 
+  filter(word == "hate") %>% # Look at only songs that have the word love
+  select(word, track, artist) %>% 
+  distinct() %>% # remove duplicate records
+  count(name = "all"))
+```
+
+Now let's see how many words we have in our songs, are love songs in general longer or shorter than the rest?
+
+We recreate the word counts without any filter for this. First our regular songs. Looks like Eminem knows how to use his words!
+
+```{r}
+top100unfilt <- top100_lyrics %>%
+  unnest_tokens(word, lyric) %>%
+  group_by(track, artist) %>%
+  summarise(num_words = n()) %>%
+  arrange(desc(num_words)) 
+
+top100unfilt[1:10,] %>%
+  ungroup(num_words, track) %>%
+  mutate(num_words = color_bar("lightblue")(num_words)) %>%
+  mutate(track = color_tile("lightgreen","lightgreen")(track)) %>%
+  my_kable_styling("Songs with highest word count")
+```
+
+Now for the love songs:
+
+```{r}
+top100loveunfilt <- top100love_lyrics %>%
+  unnest_tokens(word, lyric) %>%
+  group_by(track, artist) %>%
+  summarise(num_words = n()) %>%
+  arrange(desc(num_words)) 
+
+top100loveunfilt[1:10,] %>%
+  ungroup(num_words, track) %>%
+  mutate(num_words = color_bar("lightblue")(num_words)) %>%
+  mutate(track = color_tile("lightgreen","lightgreen")(track)) %>%
+  my_kable_styling("Songs with highest word count")
+```
+It sure looks like love doesn't need as many words.
+```{r}
+rbind(top100unfilt %>% 
+        mutate(type = "All"),
+    top100loveunfilt %>% 
+        mutate(type = "Love")) %>% 
+    ggplot(aes(num_words)) + geom_histogram() + facet_wrap(. ~ type) + theme_bw()
+```
+
+In order to do a simple evaluation of the most frequently used words in the full set of lyrics, you can use count() and top_n() to get the n top words from your clean, filtered dataset. Then use reorder() to sort words according to the count and use dplyr's mutate() verb to reassign the ordered value to word. This allows ggplot() to display it nicely.
+
+```{r}
+top100filtered %>%
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot() +
+    geom_col(aes(word, n), fill = "lightblue") +
+    theme(legend.position = "none", 
+          plot.title = element_text(hjust = 0.5),
+          panel.grid.major = element_blank()) +
+    xlab("") + 
+    ylab("Song Count") +
+    ggtitle("Most Frequently Used Words in top 100 songs (genius chart)") +
+    coord_flip()
+```
+
+Well, definetely not the top 10 words I'd normally use...
+
+Now for our love songs:
+
+```{r}
+top100lovefiltered %>%
+  count(word, sort = TRUE) %>%
+  top_n(10) %>%
+  ungroup() %>%
+  mutate(word = reorder(word, n)) %>%
+  ggplot() +
+    geom_col(aes(word, n), fill = "lightpink") +
+    theme(legend.position = "none", 
+          plot.title = element_text(hjust = 0.5),
+          panel.grid.major = element_blank()) +
+    xlab("") + 
+    ylab("Song Count") +
+    ggtitle("Most Frequently Used Words in top 100 songs (genius chart)") +
+    coord_flip()
+```
+
+Love sure reigns supreme here. 
+
+## Word cloud
+
+Just for fun let's do some word clouds from our songs.
+
+```{r}
+all_words_counts <- top100filtered %>%
+  count(word, sort = TRUE) 
+
+love_words_counts <- top100lovefiltered %>%
+  count(word, sort = TRUE)
+
+wordcloud2(all_words_counts[1:300, ], size = 2)
+```
+
+
+```{r}
+wordcloud2(love_words_counts[1:300, ], size = 2, color = "white", backgroundColor = "hotpink", shape = "caroid")
+
+# The 2 below only work in the console:
+#wordcloud2(love_words_counts[1:300, ], figPath = "heart.png", backgroundColor = "hotpink", color = "white", size = 3)
+
+#letterCloud(love_words_counts[1:300, ], word = "LOVE", size = 4)
+```
+
+## Lexical diversity and density:
+
+The more varied a vocabulary a text possesses, the higher its lexical diversity. Song Vocabulary is a representation of how many unique words are used in a song.
+
+Lexical density is an  indicator of word repetition, which is a critical songwriter's tool. As lexical density increases, repetition decreases. 
+
+```{r}
+All_songs_filtered <- rbind(top100filtered %>% 
+        mutate(type = "All"),
+    top100lovefiltered %>% 
+        mutate(type = "Love"))
+
+lex_diversity <- All_songs_filtered %>%
+  group_by(track,artist,type) %>%
+  summarise(lex_diversity = n_distinct(word)) %>%
+  arrange(desc(lex_diversity)) 
+
+diversity_plot <- lex_diversity %>%
+  ggplot(aes(type, lex_diversity)) +
+    geom_boxplot() + 
+    geom_jitter(color = "lightblue", alpha = .5) +
+    ggtitle("Lexical Diversity") +
+    xlab("") + 
+    ylab("")
+
+lex_density <- All_songs_filtered %>%
+  group_by(track,artist,type) %>%
+  summarise(lex_density = n_distinct(word)/n()) %>%
+  arrange(desc(lex_density))
+
+density_plot <- lex_density %>%
+  ggplot(aes(type, lex_density)) +
+    geom_boxplot() + 
+    geom_jitter(color = "lightpink", alpha = .5) +
+    ggtitle("Lexical Density") +
+    xlab("") + 
+    ylab("")
+
+grid.arrange(diversity_plot, density_plot, ncol = 2)
+```
+
+Love songs definitely seem to have less lexical diversity, but this could just be because we are comparing them overal top 100 songs, that will likely emcompass different genre of music. 
+How about you try to make this comparison for different genre, like country, pop, rock, etc. I bet rap songs are going to score really high on both parameters above.
+
+
+## TF-IDF
+
+A very cool concept in text analysis is TF-IDF. Here is where this comes from:
+
+Term Frequency (TF): Number of times a term occurs in a document
+Document Frequency (DF): Number of documents that contain each word
+Inverse Document Frequency (IDF) = 1/DF
+TF-IDF = TF * IDF
+
+So this is going to help us find words that are over-represented in a given document when compared to other documnets in a collection.
+
+Let's beging by looking at this concept when we compare all love songs to our list of top 100 most popular songs. For this we'll still remove the undesired words but leave the stop words. We expect the stop words should happen often in all types of music, so they'll have a low TF-IDF.
+
+```{r}
+All_songs <- rbind(top100_lyrics %>% 
+        mutate(type = "All"),
+    top100love_lyrics %>% 
+        mutate(type = "Love"))
+
+popular_tfidf_words <- All_songs %>%
+  unnest_tokens(word, lyric) %>%
+  distinct() %>%
+  filter(!word %in% undesirable_words) %>%
+  filter(nchar(word) > 3) %>%
+  count(type, word, sort = TRUE) %>%
+  ungroup() %>%
+  bind_tf_idf(word, type, n)
+
+head(popular_tfidf_words)
+```
+
+```{r}
+top_popular_tfidf_words <- popular_tfidf_words %>%
+  arrange(desc(tf_idf)) %>%
+  mutate(word = factor(word, levels = rev(unique(word)))) %>%
+  group_by(type) %>% 
+  slice(seq_len(8)) %>%
+  ungroup() %>%
+  arrange(type, tf_idf) %>%
+  mutate(row = row_number())
+
+top_popular_tfidf_words %>%
+  ggplot(aes(x = row, tf_idf, 
+             fill = type)) +
+    geom_col(show.legend = NULL) +
+    labs(x = NULL, y = "TF-IDF") + 
+    ggtitle("Important Words using TF-IDF by Chart Level") +
+    facet_wrap(~type, ncol = 3, scales = "free") +
+    scale_x_continuous(  # This handles replacement of row 
+    breaks = top_popular_tfidf_words$row, # notice need to reuse data frame
+    labels = top_popular_tfidf_words$word) +
+    coord_flip()
+```
+
+This would definitely be more interesting if we had a bunch of songs to compare our top 100 and top love songs to. But we can definitely already see what makes these two groups so differents.
+
+## Lexicons
+
+The tidytext package includes a dataset called sentiments which provides several distinct lexicons. These lexicons are dictionaries of words with an assigned sentiment category or value. tidytext provides three general purpose lexicons:
+
+* AFINN: assigns words with a score that runs between -5 and 5, with negative scores indicating negative sentiment and positive scores indicating positive sentiment.
+* Bing: assigns words into positive and negative categories.
+* NRC: assigns words into one or more of the following ten categories: positive, negative, anger, anticipation, disgust, fear, joy, sadness, surprise, and trust.
+
+```{r}
+new_sentiments <- sentiments %>% #From the tidytext package
+  filter(lexicon != "loughran") %>% #Remove the finance lexicon
+  mutate( sentiment = ifelse(lexicon == "AFINN" & score >= 0, "positive",
+                              ifelse(lexicon == "AFINN" & score < 0,
+                                     "negative", sentiment))) %>%
+  group_by(lexicon) %>%
+  mutate(words_in_lexicon = n_distinct(word)) %>%
+  ungroup()
+
+new_sentiments %>%
+  group_by(lexicon, sentiment, words_in_lexicon) %>%
+  summarise(distinct_words = n_distinct(word)) %>%
+  ungroup() %>%
+  spread(sentiment, distinct_words) %>% # We could stop here, code below just makes it look nicer.
+  mutate(lexicon = color_tile("lightblue", "lightblue")(lexicon),
+         words_in_lexicon = color_bar("lightpink")(words_in_lexicon)) %>%
+  my_kable_styling(caption = "Word Counts Per Lexicon")
+```
+
+In order to determine which lexicon is more applicable to the lyrics, you'll want to look at the match ratio of words that are common to both the lexicon and the lyrics.
+
+```{r}
+All_songs_filtered %>%
+  mutate(words_in_lyrics = n_distinct(word)) %>%
+  inner_join(new_sentiments) %>%
+  group_by(lexicon, words_in_lyrics, words_in_lexicon) %>%
+  summarise(lex_match_words = n_distinct(word)) %>%
+  ungroup() %>%
+  mutate(total_match_words = sum(lex_match_words), #Not used but good to have
+         match_ratio = lex_match_words / words_in_lyrics) %>%
+  select(lexicon, lex_match_words,  words_in_lyrics, match_ratio)
+```
+
+The NRC lexicon has more of the distinct words from the lyrics than AFINN or Bing. Notice the sum of the match ratios is low. No lexicon could have all words, nor should they. Many words are considered neutral and would not have an associated sentiment. 
+
+Take a look at some specific words from love songs which seem like they would have an impact on sentiment. Are they in all lexicons?
+
+```{r}
+new_sentiments %>%
+  filter(word %in% c("love", "darling","baby","heart","adore","care",
+                     "cherish","honey","sweet","sweetheart")) %>%
+  arrange(word) %>% #sort
+  select(word, lexicon) %>%
+  distinct() %>% #remove this field
+  mutate(word = color_tile("lightblue", "lightblue")(word),
+         lexicon = color_tile("lightgreen", "lightgreen")(lexicon)) %>%
+  my_kable_styling(caption = "Specific Words")
+```
+
+More Data Preparation?
+
+It may be the case that you need a few more data preparation steps. Here are three techniques to consider before performing sentiment analysis:
+
+* Stemming: generally refers to removing suffixes from words to get the common origin
+* Lemmatization: reducing inflected (or sometimes derived) words to their word stem, base or root form
+* Word replacement: replace words with more frequently used synonyms
+
+We won't address this here, but it's definitely worth considering.
+
+## Create Sentiment Datasets
+
+Start off by song sentiment datasets for each of the lexicons by performing an inner_join() on the get_sentiments() function. Pass the name of the lexicon for each call. For this exercise, use Bing for binary and NRC for categorical sentiments. Since words can appear in multiple categories in NRC, such as Negative/Fear or Positive/Joy, you'll also create a subset without the positive and negative categories to use later on.
+
+```{r}
+All_songs_bing <- All_songs_filtered %>%
+  inner_join(get_sentiments("bing"))
+
+All_songs_nrc <- All_songs_filtered %>%
+  inner_join(get_sentiments("nrc"))
+
+All_songs_nrc_sub <- All_songs_nrc %>%
+  filter(!sentiment %in% c("positive", "negative"))
+```
+
+Let's start by graphing the NRC sentiment analysis of the entire dataset.
+
+```{r}
+All_songs_nrc %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  ggplot(aes(sentiment, word_count)) +
+  geom_col() +
+  labs(x = NULL, y = "Word Count") +
+  ggtitle("Song NRC Sentiment") +
+  coord_flip()
+```
+
+```{r}
+All_songs_bing %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  ggplot(aes(sentiment, word_count, fill = sentiment)) +
+  geom_col() +
+  labs(x = NULL, y = "Word Count") +
+  ggtitle("Songs Bing Sentiment") +
+  coord_flip()
+```
+
+How do our love songs compare to the top100 songs now?
+
+We can calculate polarity to get an idea:
+
+```{r}
+song_polarity_chart <- All_songs_bing %>%
+  count(sentiment, type) %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(polarity = positive - negative,
+    percent_positive = positive / (positive + negative) * 100)
+
+plot1 <- song_polarity_chart %>%
+  ggplot(aes(type, polarity, fill = type)) +
+  geom_col() +
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("Polarity By Song type")
+
+plot2 <- song_polarity_chart %>%
+  ggplot(aes(type, percent_positive, fill = type)) +
+  geom_col() +
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("Percent Positive By Type")
+
+grid.arrange(plot1, plot2, ncol = 2)
+```
+
+It seems like our love songs are mostly positive, while the songs from our top100 chart are fairly negative. It could be really interesting to see how the sentiment of the top 100 songs has progressed over the years, especially if we can see how that may match historical events. But that'll be for another time.
+
+We can use the chordDiagram() to examine the relationships between NRC sentiments and song type. 
+
+```{r fig.height=4, fig.width=4}
+type_mood <-  All_songs_nrc_sub %>%
+    group_by(type,sentiment) %>% 
+    summarise(n = n()) %>% 
+    mutate(freq = n/sum(n)) %>% 
+    ungroup()
+
+circos.clear()
+chordDiagram(select(type_mood, type, sentiment, freq), transparency = .2)
+title("Relationship between mood and song type")
+```
+
+We can also take a deeper look into the mood of specific songs. We can start with Whitney Houston's I Will Always Love You.
+
+```{r}
+All_songs_nrc %>%
+  filter(track %in% "I Will Always Love You") %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  ggplot(aes(sentiment, word_count, fill = -word_count)) +
+  geom_col() +
+  guides(fill = FALSE) +
+  theme_minimal() +
+  labs(x = NULL, y = "Word Count") +
+  ggtitle("I Will Always Love You NRC Sentiment") +
+  coord_flip()
+```
+
+Compare that to Kendrick Lamar's HUMBLE. from out top 100 chart:
+
+```{r}
+All_songs_nrc %>%
+  filter(track %in% "HUMBLE.") %>%
+  group_by(sentiment) %>%
+  summarise(word_count = n()) %>%
+  ungroup() %>%
+  mutate(sentiment = reorder(sentiment, word_count)) %>%
+  ggplot(aes(sentiment, word_count, fill = -word_count)) +
+  geom_col() +
+  guides(fill = FALSE) +
+  theme_minimal() +
+  labs(x = NULL, y = "Word Count") +
+  ggtitle("I Will Always Love You NRC Sentiment") +
+  coord_flip()
+```
+
+Using ggplot2 to create a slightly different chart, look at the words for each category.
+
+```{r}
+All_songs_filtered %>%
+  filter(track %in% 'I Will Always Love You') %>%
+  distinct(word) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  ggplot(aes(x = word, fill = sentiment)) +
+  facet_grid(~sentiment) +
+  geom_bar() + #Create a bar for each word per sentiment
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        axis.text.x = element_blank()) + #Place the words on the y-axis
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("I WIll ALways Love You Sentiment Words") +
+  coord_flip()
+```
+
+```{r}
+All_songs_filtered %>%
+  filter(track %in% 'HUMBLE.') %>%
+  distinct(word) %>%
+  inner_join(get_sentiments("nrc")) %>%
+  ggplot(aes(x = word, fill = sentiment)) +
+  facet_grid(~sentiment) +
+  geom_bar() + #Create a bar for each word per sentiment
+  theme_minimal() +
+  theme(panel.grid.major.x = element_blank(),
+        axis.text.x = element_blank()) + #Place the words on the y-axis
+  xlab(NULL) + ylab(NULL) +
+  ggtitle("HUMBLE. Sentiment Words") +
+  coord_flip()
+```
+
+So far you have only been looking at unigrams or single words. But if "love" is a common word, what precedes it? Or follows it? Looking at single words out of context could be misleading. For example care could have a positive sentiment, while not care would be negative.
+
+We don't have time to repeat our analysis using bygrams, but it's definitely something you should try!
+
+Conveniently, the tidytext package provides the ability to unnest pairs of words as well as single words. In this case, you'll call unnest_tokens() passing the token argument ngrams. Since you're just looking at bigrams (two consecutive words), pass n = 2. 
+
+Try to play with sentiment analysis some more on your own and share your results with us later!
+
+Thanks!
+
+
+
