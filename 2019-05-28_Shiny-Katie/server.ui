@@ -1,0 +1,24 @@
+#
+# This is the server logic of a Shiny web application. You can run the 
+# application by clicking 'Run App' above.
+#
+# Find out more about building applications with Shiny here:
+# 
+#    http://shiny.rstudio.com/
+#
+
+library(shiny)
+
+# Define server logic required
+shinyServer(function(input, output) {
+    
+    # Function that Renders Bar Plot
+    output$topicPlot <- renderPlot({
+        # Creating a bar plot to display the number of votes per topic for a given experience level
+        p <- ggplot(dat_SD_melt[level==input$level],aes(x=topic))+geom_bar(stat="count",colour="black")
+        p <- p + r_ladies_theme() # Adding the R ladies theme
+        p <- p + theme(axis.text.x = element_text(angle=20,vjust=0.6,size=14)) # Adjusting the theme
+        p
+    })
+  
+})
