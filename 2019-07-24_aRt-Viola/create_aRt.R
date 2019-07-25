@@ -18,7 +18,8 @@ library(abind)
 library(grid)
 
 # Set your working directory for easier config--------------
-# You should also drop any long text or photos you want to use in here
+# You should also drop any long text (.txt) or photos (.jpg) 
+# you want to use in here
 
 setwd('/Users/violaglenn/Documents/RLadies')
 
