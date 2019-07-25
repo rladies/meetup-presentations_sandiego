@@ -83,12 +83,13 @@ text
 # Fill the grid (image) with the letters--------------------------
 # And learn about for loops!
 
-grid.newpage()
+grid.newpage() #Never forget this step, else you'll just be overwriting 
+               #the existing plot
 
 counter <- 0
 
-for (i in seq(1, nrow(sat_grid), 13)) { #It took some trial and error to get the 13 and 5
-  for (j in seq(1, ncol(sat_grid), 5)) { 
+for (i in seq(1, nrow(sat_grid), 13)) { #Rows, it took some trial and error to get the 13 and 5
+  for (j in seq(1, ncol(sat_grid), 5)) {  #Columns
     
     #For each cell of the image matrix [i, j]:
     if (sat_grid[i, j] < 0.5) { #Only fill in areas that are saturated
@@ -107,7 +108,7 @@ for (i in seq(1, nrow(sat_grid), 13)) { #It took some trial and error to get the
 # This is a bit crowded where letters like m and w are wide.
 # Let's make more space for big letters & less for small letters.
 
-fatChars <- LETTERS[-which(LETTERS == "I")]
+fatChars <- c(LETTERS[-which(LETTERS == "I")], "m", "w", "@")
 skinnyChars <- c("l", "I", "i", "t", "'", "f", ",")
 
 # We'll just adapt the loops above to handle different types of letters
@@ -179,7 +180,7 @@ drawImageWithText <- function(img,
   text <- str_split(text, "")[[1]]
   
   #Customize character spacing, exactly as before, but now within the function
-  fatChars <- LETTERS[-which(LETTERS == "I")]
+  fatChars <- c(LETTERS[-which(LETTERS == "I")], "m", "w", "@")
   skinnyChars <- c("l", "I", "i", "t", "'", "f", ",")
   
   #Resize if specified -- This is new
