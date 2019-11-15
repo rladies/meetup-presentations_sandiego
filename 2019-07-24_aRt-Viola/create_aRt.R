@@ -64,7 +64,10 @@ img <- grayscale(img)
 
 # Convert to a matrix where the value in each cell = saturation
 # Cell values will be from 0 to 1, representing how dark the color is
-sat_grid <- img %>% as.matrix() %>% t()
+sat_grid <- img %>% 
+  as.matrix() %>% 
+  t()
+
 dim(sat_grid) #Remember how we resized to 700 by 500? That's the size of our matrix now!
 
 plot(as.cimg(sat_grid))
@@ -78,9 +81,9 @@ plot(as.cimg(sat_grid > 0.5))
 # letters. We could do some extra cleaning and get rid of white space and
 # characters now, or we could just figure that out later.
 text <- str_split(mission, "")[[1]]
-text 
+text
 
-# Fill the grid (image) with the letters--------------------------
+# Fill the grid (imager) with the letters--------------------------
 # And learn about for loops!
 
 grid.newpage() #Never forget this step, else you'll just be overwriting 
@@ -130,7 +133,7 @@ for (i in seq(1, nrow(sat_grid), 15)) {
       beforeLastChar <- ifelse(counter > 2, lastChar, " ") 
       
       grid.text(char,
-                x = j/ncol(imgGSMat) +
+                x = j/ncol(sat_grid) +
                  + 0.004 * (lastChar %in% fatChars) -
                  - 0.003 * (lastChar %in% skinnyChars) +
                  + 0.003 * (beforeLastChar %in% fatChars) -
