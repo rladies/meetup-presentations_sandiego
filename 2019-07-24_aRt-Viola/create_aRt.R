@@ -100,11 +100,14 @@ for (i in seq(1, nrow(sat_grid), 13)) { #Rows, it took some trial and error to g
       grid.text(text[counter], #Take the right letter
                 x = j / ncol(sat_grid), #Convert to ratios that grid.text likes instead of pixels
                 y = 1 - i / nrow(sat_grid), #Same w/ ratios
-                gp = gpar(fontsize = 10),
+                gp = gpar(fontsize = 10, 
+                          fontfamily = 'mono'),
                 just = "left")
     }
   }
 }
+
+# Check out more about font families here: https://www.stat.auckland.ac.nz/~paul/R/fontfamily.pdf
 
 # Adapt the filling to account for letter size----------------------
 
@@ -158,9 +161,9 @@ for (i in seq(1, nrow(sat_grid), 15)) {
 
 # Parameters-------------------------
 
-#img = image
-#text = text
-#thresh = The saturation value we previous set to 0.5. 
+# img = image
+# text = text
+# thresh = The saturation value we previous set to 0.5. 
 #         Any value between 0 and 1 that will dictate
 #         which cells to place letters w/in.
 # color = T/F, if the image contains color
@@ -174,7 +177,8 @@ drawImageWithText <- function(img,
                               thresh, 
                               color = FALSE, #adding an argument here sets it as the default
                               fontSize = 10, 
-                              resize = TRUE) {
+                              resize = TRUE,
+                              fontFamily = 'Courier') {
   
   #Format the text, exactly as before, but now within the function
   text <- paste(text, collapse = " ")
@@ -215,7 +219,9 @@ drawImageWithText <- function(img,
                     +  0.003 * (beforeLastChar %in% fatChars) 
                     -  0.002 * (beforeLastChar %in% skinnyChars),
                   y = 1 - i / nrow(imgGSMat) - 0.01,
-                  gp = gpar(fontsize = fontSize, col = ifelse(!color, #New feature 3: Add color if not black and white!
+                  gp = gpar(fontfamily = fontFamily, 
+                            fontsize = fontSize, 
+                            col = ifelse(!color, #New feature 3: Add color if not black and white!
                                                               "black",
                                                               rgb(imgMat[i, j, 1],
                                                                   imgMat[i, j, 2],
